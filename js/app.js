@@ -356,27 +356,70 @@ function generatePDF(inv) {
     const el = document.getElementById('invoicePDF');
     if (!el) return;
 
-    // Clone the invoice template outside the modal for proper rendering
-    const clone = el.cloneNode(true);
-    clone.id = 'invoicePDFClone';
-    clone.style.cssText = 'position:fixed;top:0;left:0;width:800px;z-index:-9999;background:#fff;padding:40px;';
-    document.body.appendChild(clone);
+    // Create a new window with the invoice content for reliable PDF
+    const printWindow = window.open('', '_blank', 'width=800,height=1100');
+    if (!printWindow) {
+        showToast(getSettings().language === 'id' ? 'Izinkan popup untuk download PDF' : 'Allow popups to download PDF', 'error');
+        return;
+    }
 
-    const opt = {
-        margin: [0.3, 0.4, 0.3, 0.4],
-        filename: `${inv.number}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 800 },
-        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+    const styles = `
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap');
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Inter', Arial, sans-serif; color: #1a1a2e; background: #fff; }
+            .invoice-template { padding: 40px; max-width: 800px; margin: 0 auto; }
+            .inv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #0f1419; }
+            .inv-brand h1 { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; margin-bottom: 2px; }
+            .inv-brand p { font-size: 11px; color: #64748b; line-height: 1.5; }
+            .inv-meta { text-align: right; }
+            .inv-meta .inv-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #0f1419; }
+            .inv-meta .inv-number { display: inline-block; background: #c8a55a; color: #fff; padding: 4px 14px; border-radius: 4px; font-size: 12px; font-weight: 700; margin-top: 6px; letter-spacing: 0.5px; }
+            .inv-meta .inv-date { font-size: 12px; color: #64748b; margin-top: 8px; }
+            .inv-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 28px; }
+            .inv-party-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #c8a55a; margin-bottom: 8px; }
+            .inv-party-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+            .inv-party-detail { font-size: 11.5px; color: #64748b; line-height: 1.6; }
+            .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+            .inv-table thead th { background: #0f1419; color: #fff; padding: 10px 14px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
+            .inv-table thead th:last-child, .inv-table thead th:nth-child(3), .inv-table thead th:nth-child(4) { text-align: right; }
+            .inv-table tbody td { padding: 12px 14px; font-size: 12.5px; border-bottom: 1px solid #e2e8f0; }
+            .inv-table tbody td:last-child, .inv-table tbody td:nth-child(3), .inv-table tbody td:nth-child(4) { text-align: right; }
+            .item-name { font-weight: 600; }
+            .inv-summary { display: flex; justify-content: flex-end; margin-bottom: 28px; }
+            .inv-summary-table { min-width: 260px; }
+            .inv-summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12.5px; color: #64748b; }
+            .inv-summary-row.total { border-top: 2px solid #0f1419; margin-top: 8px; padding-top: 10px; font-size: 18px; font-weight: 800; color: #0f1419; }
+            .inv-summary-row.dp { color: #d97706; font-weight: 600; }
+            .inv-summary-row.remaining { color: #c8a55a; font-weight: 700; }
+            .inv-payment { margin-bottom: 24px; padding: 16px; background: #f8f9fb; border-radius: 8px; }
+            .inv-payment h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #c8a55a; margin-bottom: 10px; }
+            .inv-payment p { font-size: 12px; color: #1a1a2e; line-height: 1.6; }
+            .inv-terms { margin-bottom: 24px; }
+            .inv-terms h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #c8a55a; margin-bottom: 10px; }
+            .inv-terms ol { padding-left: 18px; font-size: 10.5px; color: #64748b; line-height: 1.8; }
+            .inv-footer { border-top: 2px solid #0f1419; padding-top: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .inv-footer-contact { font-size: 10.5px; color: #64748b; line-height: 1.7; }
+            .inv-footer-sig { text-align: center; }
+            .inv-footer-sig .sig-line { width: 140px; border-bottom: 1px solid #1a1a2e; margin-bottom: 6px; padding-top: 40px; }
+            .inv-footer-sig .sig-name { font-size: 12px; font-weight: 700; }
+            .inv-footer-sig .sig-role { font-size: 10px; color: #64748b; }
+            @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        </style>
+    `;
+
+    printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${inv.number}</title>${styles}</head><body>${el.outerHTML}</body></html>`);
+    printWindow.document.close();
+
+    // Wait for fonts to load then trigger print
+    printWindow.onload = function() {
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.onafterprint = () => printWindow.close();
+        }, 500);
     };
 
-    html2pdf().set(opt).from(clone).save().then(() => {
-        clone.remove();
-        showToast(getSettings().language === 'id' ? 'PDF berhasil didownload!' : 'PDF downloaded!', 'success');
-    }).catch(() => {
-        clone.remove();
-        showToast('PDF generation failed', 'error');
-    });
+    showToast(getSettings().language === 'id' ? 'Gunakan "Save as PDF" pada dialog print' : 'Use "Save as PDF" in the print dialog', 'info');
 }
 
 // --- Language Toggle ---
