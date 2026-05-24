@@ -355,9 +355,27 @@ function previewInvoice(id) {
 function generatePDF(inv) {
     const el = document.getElementById('invoicePDF');
     if (!el) return;
-    const opt = { margin: 0.4, filename: `${inv.number}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' } };
-    html2pdf().set(opt).from(el).save().then(() => {
+
+    // Clone the invoice template outside the modal for proper rendering
+    const clone = el.cloneNode(true);
+    clone.id = 'invoicePDFClone';
+    clone.style.cssText = 'position:fixed;top:0;left:0;width:800px;z-index:-9999;background:#fff;padding:40px;';
+    document.body.appendChild(clone);
+
+    const opt = {
+        margin: [0.3, 0.4, 0.3, 0.4],
+        filename: `${inv.number}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 800 },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(clone).save().then(() => {
+        clone.remove();
         showToast(getSettings().language === 'id' ? 'PDF berhasil didownload!' : 'PDF downloaded!', 'success');
+    }).catch(() => {
+        clone.remove();
+        showToast('PDF generation failed', 'error');
     });
 }
 
